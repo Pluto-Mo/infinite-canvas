@@ -39,6 +39,7 @@ type CanvasNodeProps = {
   onSetBatchPrimary?: (node: CanvasNodeData) => void;
   onRetry?: (node: CanvasNodeData) => void;
   onGenerateImage?: (node: CanvasNodeData) => void;
+  onImageZoom?: (nodeId: string) => void;
   onContextMenu: (event: React.MouseEvent, nodeId: string) => void;
 };
 
@@ -89,6 +90,7 @@ export const CanvasNode = React.memo(function CanvasNode({
   onSetBatchPrimary,
   onRetry,
   onGenerateImage,
+  onImageZoom,
   onContextMenu,
 }: CanvasNodeProps) {
   const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -97,7 +99,7 @@ export const CanvasNode = React.memo(function CanvasNode({
   const hasImageContent = data.type === CanvasNodeType.Image && Boolean(data.metadata?.content);
   const isBatchRoot = data.type === CanvasNodeType.Image && Boolean(data.metadata?.isBatchRoot) && batchCount > 1;
   const isBatchChild = data.type === CanvasNodeType.Image && Boolean(data.metadata?.batchRootId);
-  const isActive = isConnectionTarget || isSelected || isFocusRelated;
+  const isActive = isConnectionTarget || isSelected;
   const imageBorderColor = isActive ? selectionBlue : isRelated && !isBatchChild ? theme.node.muted : "transparent";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const resizeRef = useRef({
@@ -257,6 +259,11 @@ export const CanvasNode = React.memo(function CanvasNode({
             onToggleBatch?.(data.id);
             return;
           }
+          if (data.type === CanvasNodeType.Image && data.metadata?.content) {
+            event.stopPropagation();
+            onImageZoom?.(data.id);
+            return;
+          }
           if (data.type !== CanvasNodeType.Text) return;
           event.stopPropagation();
           setIsEditingContent(true);
@@ -321,7 +328,7 @@ export const CanvasNode = React.memo(function CanvasNode({
         onMouseDown={(event) => onConnectStart(event, data.id, "source")}
       />
 
-      {showPanel && renderPanel && data.type !== CanvasNodeType.Config ? <div className="absolute left-1/2 top-full z-[70] w-[500px] -translate-x-1/2 pt-4">{renderPanel(data)}</div> : null}
+      {showPanel && renderPanel && data.type !== CanvasNodeType.Config ? <div className="absolute left-1/2 top-full z-[70] min-w-[500px] -translate-x-1/2 pt-4">{renderPanel(data)}</div> : null}
     </div>
   );
 });

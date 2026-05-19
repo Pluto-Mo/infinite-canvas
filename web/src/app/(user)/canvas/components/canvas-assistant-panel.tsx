@@ -20,6 +20,7 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import type { ReferenceImage } from "@/types/image";
 import { DiaTextReveal } from "@/components/ui/dia-text-reveal";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
+import { ImagePreviewOverlay } from "./image-preview-overlay";
 import { CanvasNodeType, type CanvasAssistantImage, type CanvasAssistantMessage, type CanvasAssistantReference, type CanvasAssistantSession, type CanvasNodeData } from "../types";
 
 type AssistantMode = "ask" | "image";
@@ -495,6 +496,7 @@ function AssistantMessages({
   onInsertText: (text: string) => void;
 }) {
   const theme = canvasThemes[useThemeStore((state) => state.theme)];
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
   return (
     <>
@@ -514,12 +516,13 @@ function AssistantMessages({
           ) : null}
           {message.images?.map((image) => (
             <div key={image.id} className="w-[250px] overflow-hidden rounded-2xl border" style={{ background: theme.node.panel, borderColor: theme.node.stroke }}>
-              <img src={image.dataUrl} alt="" className="aspect-square w-full object-cover" />
+              <img src={image.dataUrl} alt="" className="aspect-square w-full cursor-pointer object-cover" onClick={() => setPreviewSrc(image.dataUrl)} />
               <Button type="text" className="!h-8 !w-full !rounded-none" style={{ borderTop: `1px solid ${theme.node.stroke}`, color: theme.node.text }} icon={<Plus className="size-3.5" />} onClick={() => onInsertImage(image)} title="插入画布" />
             </div>
           ))}
         </div>
       ))}
+      <ImagePreviewOverlay src={previewSrc} onClose={() => setPreviewSrc(null)} />
     </>
   );
 }

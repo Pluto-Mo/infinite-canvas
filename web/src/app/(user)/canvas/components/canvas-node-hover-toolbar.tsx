@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Modal, Segmented, Tooltip } from "antd";
-import { Camera, Download, FolderPlus, Image as ImageIcon, Info, Lock, LockOpen, MessageSquare, Minus, Pencil, Plus, RefreshCw, Scissors, Settings2, Trash2, Upload } from "lucide-react";
+import { Camera, Download, FolderPlus, Image as ImageIcon, Info, Lock, LockOpen, Maximize, MessageSquare, Minus, Pencil, Plus, RefreshCw, Scissors, Settings2, Trash2, Upload } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, getDataUrlByteSize } from "@/lib/image-utils";
@@ -25,6 +25,7 @@ type CanvasNodeHoverToolbarProps = {
   onSaveAsset: (node: CanvasNodeData) => void;
   onCrop: (node: CanvasNodeData) => void;
   onAngle: (node: CanvasNodeData) => void;
+  onPreview: (node: CanvasNodeData) => void;
   onRetry: (node: CanvasNodeData) => void;
   onToggleFreeResize: (node: CanvasNodeData) => void;
   onDelete: (node: CanvasNodeData) => void;
@@ -46,6 +47,7 @@ export function CanvasNodeHoverToolbar({
   onSaveAsset,
   onCrop,
   onAngle,
+  onPreview,
   onRetry,
   onToggleFreeResize,
   onDelete,
@@ -77,6 +79,7 @@ export function CanvasNodeHoverToolbar({
       {canRetry ? <ToolbarAction title="重新生成" label="重试" icon={<RefreshCw className="size-4" />} onClick={() => onRetry(node)} /> : null}
       {hasImage || isText ? <ToolbarAction title="加入我的素材" label="存素材" icon={<FolderPlus className="size-4" />} onClick={() => onSaveAsset(node)} /> : null}
       {hasImage ? <IconAction title="下载图片" icon={<Download className="size-5" />} onClick={() => onDownload(node)} /> : null}
+      {hasImage ? <ToolbarAction title="全屏预览" label="预览" icon={<Maximize className="size-4" />} onClick={() => onPreview(node)} /> : null}
       {canOpenDialog ? <ToolbarAction title="编辑" label="编辑" icon={<MessageSquare className="size-4" />} onClick={() => onToggleDialog(node)} /> : null}
       {isText ? <ToolbarAction title="编辑文本" label="编辑文字" icon={<Pencil className="size-4" />} onClick={() => onEditText(node)} /> : null}
       {isText ? <ToolbarAction title="用文本生图" label="生图" icon={<ImageIcon className="size-4" />} onClick={() => onGenerateImage(node)} /> : null}

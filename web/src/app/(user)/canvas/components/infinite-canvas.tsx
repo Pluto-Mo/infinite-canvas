@@ -13,6 +13,7 @@ type InfiniteCanvasProps = {
   onViewportChange: (viewport: ViewportTransform) => void;
   onCanvasMouseDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onCanvasDeselect?: () => void;
+  onCanvasDoubleClick?: (event: React.MouseEvent) => void;
   onContextMenu?: (event: React.MouseEvent) => void;
   onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
@@ -25,6 +26,7 @@ export function InfiniteCanvas({
   onViewportChange,
   onCanvasMouseDown,
   onCanvasDeselect,
+  onCanvasDoubleClick,
   onContextMenu,
   onDrop,
   children,
@@ -38,6 +40,7 @@ export function InfiniteCanvas({
     initialY: 0,
     hasMoved: false,
   });
+  const rightClickPannedRef = useRef(false);
   const scaleRef = useRef(viewport.k);
   const frameRef = useRef<number | null>(null);
   const nextViewportRef = useRef<ViewportTransform | null>(null);
@@ -97,30 +100,31 @@ export function InfiniteCanvas({
     if (target?.closest("[data-connection-create-menu]")) return;
     const isBackgroundClick = !target?.closest("[data-node-id],[data-connection-id]");
 
-    if (event.button === 0 && (event.ctrlKey || event.metaKey) && isBackgroundClick) {
+    // Middle-click → pan (unchanged)
+    if (event.button === 1) {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
-      onCanvasMouseDown?.(event);
-      return;
-    }
-
-    if (event.button === 1 || (event.button === 0 && !isSpacePressed && isBackgroundClick)) {
-      event.preventDefault();
-      event.currentTarget.setPointerCapture(event.pointerId);
-      panState.current = {
-        isPanning: true,
-        startX: event.clientX,
-        startY: event.clientY,
-        initialX: viewport.x,
-        initialY: viewport.y,
-        hasMoved: false,
-      };
+      panState.current = { isPanning: true, startX: event.clientX, startY: event.clientY, initialX: viewport.x, initialY: viewport.y, hasMoved: false };
       document.body.style.cursor = "grabbing";
       return;
     }
 
-    if (event.button === 0 && isSpacePressed && isBackgroundClick) {
+    // Right-click on background → pan
+    if (event.button === 2 && isBackgroundClick) {
       event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      rightClickPannedRef.current = false;
+      panState.current = { isPanning: true, startX: event.clientX, startY: event.clientY, initialX: viewport.x, initialY: viewport.y, hasMoved: false };
+      document.body.style.cursor = "grabbing";
+      return;
+    }
+
+    // Left-click on background → forward to parent for selection box / deselect
+    if (event.button === 0 && isBackgroundClick) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      onCanvasMouseDown?.(event);
+      return;
     }
   };
 
@@ -132,6 +136,7 @@ export function InfiniteCanvas({
       const dy = event.clientY - panState.current.startY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
         panState.current.hasMoved = true;
+        rightClickPannedRef.current = true;
       }
 
       nextViewportRef.current = {
@@ -176,11 +181,23 @@ export function InfiniteCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full cursor-grab select-none overflow-hidden"
+      className="relative h-full w-full cursor-default select-none overflow-hidden"
       style={{ background: theme.canvas.background }}
       onPointerDown={handlePointerDown}
       onWheel={handleWheel}
-      onContextMenu={onContextMenu}
+      onContextMenu={(event) => {
+        if (rightClickPannedRef.current) {
+          event.preventDefault();
+          rightClickPannedRef.current = false;
+          return;
+        }
+        onContextMenu?.(event);
+      }}
+      onDoubleClick={(event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        if (target?.closest("[data-node-id],[data-connection-id]")) return;
+        onCanvasDoubleClick?.(event);
+      }}
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
     >

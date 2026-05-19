@@ -23,11 +23,13 @@ import { NODE_DEFAULT_SIZE, getNodeSpec } from "../constants";
 import { ActiveConnectionPath, ConnectionPath } from "../components/canvas-connections";
 import { CanvasConfigNodePanel } from "../components/canvas-config-node-panel";
 import { CanvasAssistantPanel } from "../components/canvas-assistant-panel";
+import { CanvasAddNodePanel } from "../components/canvas-add-node-panel";
 import { CanvasNodeContextMenu } from "../components/canvas-context-menu";
 import { CanvasNodeAngleDialog, type CanvasImageAngleParams } from "../components/canvas-node-angle-dialog";
 import { CanvasNodeCropDialog, type CanvasImageCropRect } from "../components/canvas-node-crop-dialog";
 import { buildNodeChatMessages, buildNodeGenerationContext, buildNodeGenerationInputs, hydrateNodeGenerationContext, type NodeGenerationInput } from "../components/canvas-node-generation";
 import { CanvasNodeHoverToolbar, CanvasNodeInfoModal } from "../components/canvas-node-hover-toolbar";
+import { ImagePreviewOverlay } from "../components/image-preview-overlay";
 import { InfiniteCanvas } from "../components/infinite-canvas";
 import { Minimap } from "../components/canvas-mini-map";
 import { CanvasNode } from "../components/canvas-node";
@@ -268,6 +270,7 @@ function InfiniteCanvasPage() {
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [assetPickerTab, setAssetPickerTab] = useState<AssetPickerTab>("my-assets");
   const [projectLoaded, setProjectLoaded] = useState(false);
+  const [addNodePanelPos, setAddNodePanelPos] = useState<{ x: number; y: number } | null>(null);
   const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
   const [dialogNodeId, setDialogNodeId] = useState<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -275,6 +278,7 @@ function InfiniteCanvasPage() {
   const [infoNodeId, setInfoNodeId] = useState<string | null>(null);
   const [cropNodeId, setCropNodeId] = useState<string | null>(null);
   const [angleNodeId, setAngleNodeId] = useState<string | null>(null);
+  const [previewImageSrc, setPreviewImageSrc] = useState<string | null>(null);
   const [assistantCollapsed, setAssistantCollapsed] = useState(true);
   const [assistantMounted, setAssistantMounted] = useState(false);
   const [titleEditing, setTitleEditing] = useState(false);
@@ -646,6 +650,7 @@ function InfiniteCanvasPage() {
     setToolbarNodeId(null);
     setDialogNodeId(null);
     setEditingNodeId(null);
+    setAddNodePanelPos(null);
   }, [cancelPendingConnectionCreate]);
 
   const clearCanvas = useCallback(() => {
@@ -768,6 +773,16 @@ function InfiniteCanvasPage() {
     setContextMenu(null);
   }, [size.height, size.width]);
 
+  const zoomToNode = useCallback((node: CanvasNodeData) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const sw = rect?.width || size.width;
+    const sh = rect?.height || size.height;
+    const scale = Math.min(sw * 0.75 / node.width, sh * 0.75 / node.height, 5);
+    const cx = node.position.x + node.width / 2;
+    const cy = node.position.y + node.height / 2;
+    setViewport({ x: sw / 2 - cx * scale, y: sh / 2 - cy * scale, k: scale });
+  }, [size.width, size.height]);
+
   const applyHistory = useCallback((entry: CanvasHistoryEntry) => {
     if (historyCommitTimerRef.current) {
       clearTimeout(historyCommitTimerRef.current);
@@ -819,15 +834,9 @@ function InfiniteCanvasPage() {
   const handleCanvasMouseDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       setContextMenu(null);
+      setAddNodePanelPos(null);
       if (pendingConnectionCreateRef.current) cancelPendingConnectionCreate();
       if (event.button !== 0) return;
-
-      if (!event.ctrlKey && !event.metaKey) {
-        setSelectionBox(null);
-        setSelectedNodeIds(new Set());
-        setSelectedConnectionId(null);
-        return;
-      }
 
       const world = screenToCanvas(event.clientX, event.clientY);
       const nextSelectionBox = {
@@ -835,16 +844,17 @@ function InfiniteCanvasPage() {
         startWorldY: world.y,
         currentWorldX: world.x,
         currentWorldY: world.y,
-        additive: event.shiftKey,
-        initialSelectedNodeIds: event.shiftKey ? Array.from(selectedNodeIdsRef.current) : [],
+        additive: event.shiftKey || event.ctrlKey || event.metaKey,
+        initialSelectedNodeIds: (event.shiftKey || event.ctrlKey || event.metaKey) ? Array.from(selectedNodeIdsRef.current) : [],
       };
       selectionBoxRef.current = nextSelectionBox;
       setSelectionBox(nextSelectionBox);
-      if (!event.shiftKey) {
+      if (!event.shiftKey && !event.ctrlKey && !event.metaKey) {
         setSelectedNodeIds(new Set());
       }
-
       setSelectedConnectionId(null);
+      setToolbarNodeId(null);
+      setDialogNodeId(null);
     },
     [cancelPendingConnectionCreate, screenToCanvas],
   );
@@ -922,6 +932,8 @@ function InfiniteCanvasPage() {
     dragRef.current.initialSelectedNodes = [];
     if (wasClick && clickedNodeId) {
       const clickedNode = nodesRef.current.find((node) => node.id === clickedNodeId);
+      // Show toolbar on single click for all node types
+      setToolbarNodeId(clickedNodeId);
       if (clickedNode?.type === CanvasNodeType.Text) {
         setDialogNodeId((current) => current === clickedNodeId ? current : null);
       } else {
@@ -995,6 +1007,7 @@ function InfiniteCanvasPage() {
       selectionBoxRef.current = nextSelectionBox;
       setSelectionBox(nextSelectionBox);
       setSelectedNodeIds(nextSelected);
+      if (nextSelected.size !== 1) setToolbarNodeId(null);
     },
     [screenToCanvas],
   );
@@ -1481,7 +1494,7 @@ function InfiniteCanvasPage() {
             },
             width: imageConfig.width,
             height: imageConfig.height,
-            metadata: { prompt: effectivePrompt, status: NODE_STATUS_LOADING, isBatchRoot: count > 1, batchChildIds: count > 1 ? childIds : undefined, imageBatchExpanded: count > 1 ? true : undefined },
+            metadata: { prompt: effectivePrompt, status: NODE_STATUS_LOADING, isBatchRoot: count > 1, batchChildIds: count > 1 ? childIds : undefined, imageBatchExpanded: count > 1 ? false : undefined },
           };
           const childNodes: CanvasNodeData[] = childIds.map((id, index) => ({
             id,
@@ -1797,6 +1810,9 @@ function InfiniteCanvasPage() {
           }}
           onCanvasMouseDown={handleCanvasMouseDown}
           onCanvasDeselect={deselectCanvas}
+          onCanvasDoubleClick={(event) => {
+            setAddNodePanelPos({ x: event.clientX, y: event.clientY });
+          }}
           onContextMenu={preventCanvasContextMenu}
           onDrop={handleDrop}
         >
@@ -1807,7 +1823,8 @@ function InfiniteCanvasPage() {
             {connections.filter((connection) => {
               const from = nodeById.get(connection.fromNodeId);
               const to = nodeById.get(connection.toNodeId);
-              return Boolean(from && to && !isHiddenBatchConnectionEndpoint(from, nodes) && !isHiddenBatchConnectionEndpoint(to, nodes));
+              if (!from || !to) return false;
+              return !isHiddenBatchConnectionEndpoint(from, nodes) && !isHiddenBatchConnectionEndpoint(to, nodes);
             }).map((connection) => {
               const from = nodeById.get(connection.fromNodeId);
               const to = nodeById.get(connection.toNodeId);
@@ -1853,9 +1870,16 @@ function InfiniteCanvasPage() {
                 <CanvasNodePromptPanel
                   node={panelNode}
                   isRunning={runningNodeId === panelNode.id}
+                  referenceImages={connections
+                    .filter((c) => c.toNodeId === panelNode.id)
+                    .map((c) => nodeById.get(c.fromNodeId))
+                    .filter((n): n is CanvasNodeData & { metadata: { content: string } } =>
+                      n != null && n.type === CanvasNodeType.Image && typeof n.metadata?.content === "string")
+                    .map((n) => ({ id: n.id, src: n.metadata.content, title: n.title }))}
                   onPromptChange={handleNodePromptChange}
                   onConfigChange={handleConfigNodeChange}
                   onGenerate={handleGenerateNode}
+                  onClose={() => setDialogNodeId(null)}
                 />
               )}
               renderNodeContent={(contentNode) => (
@@ -1876,11 +1900,9 @@ function InfiniteCanvasPage() {
               onHoverStart={(nodeId) => {
                 if (nodeDraggingRef.current) return;
                 setHoveredNodeId(nodeId);
-                keepNodeToolbar(nodeId);
               }}
               onHoverEnd={(nodeId) => {
                 setHoveredNodeId((current) => current === nodeId ? null : current);
-                hideNodeToolbar();
               }}
               onConnectStart={handleConnectStart}
               onResize={handleNodeResize}
@@ -1889,6 +1911,10 @@ function InfiniteCanvasPage() {
               onSetBatchPrimary={setBatchPrimary}
               onRetry={(node) => void handleRetryNode(node)}
               onGenerateImage={generateImageFromTextNode}
+              onImageZoom={(nodeId) => {
+                const node = nodesRef.current.find((n) => n.id === nodeId);
+                if (node) zoomToNode(node);
+              }}
               onContextMenu={(event, id) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -1935,6 +1961,7 @@ function InfiniteCanvasPage() {
           onSaveAsset={(node) => void saveNodeAsset(node)}
           onCrop={(node) => setCropNodeId(node.id)}
           onAngle={(node) => setAngleNodeId(node.id)}
+          onPreview={(node) => { if (node.metadata?.content) setPreviewImageSrc(node.metadata.content); }}
           onRetry={(node) => void handleRetryNode(node)}
           onToggleFreeResize={(node) => toggleNodeFreeResize(node.id)}
           onDelete={(node) => deleteNodes(new Set([node.id]))}
@@ -1984,6 +2011,16 @@ function InfiniteCanvasPage() {
           />
         ) : null}
 
+        {addNodePanelPos ? (
+          <CanvasAddNodePanel
+            position={addNodePanelPos}
+            onAddText={() => { createNode(CanvasNodeType.Text, screenToCanvas(addNodePanelPos.x, addNodePanelPos.y)); setAddNodePanelPos(null); }}
+            onAddImage={() => { createNode(CanvasNodeType.Image, screenToCanvas(addNodePanelPos.x, addNodePanelPos.y)); setAddNodePanelPos(null); }}
+            onUpload={() => { handleUploadRequest(); setAddNodePanelPos(null); }}
+            onClose={() => setAddNodePanelPos(null)}
+          />
+        ) : null}
+
         <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageInputChange} />
 
         <CanvasNodeInfoModal node={infoNode} open={Boolean(infoNode)} onClose={() => setInfoNodeId(null)} />
@@ -2006,8 +2043,9 @@ function InfiniteCanvasPage() {
           />
         ) : null}
 
+        <ImagePreviewOverlay src={previewImageSrc} onClose={() => setPreviewImageSrc(null)} />
+
         <Modal
-          title="清空画布？"
           open={clearConfirmOpen}
           centered
           onCancel={() => setClearConfirmOpen(false)}
