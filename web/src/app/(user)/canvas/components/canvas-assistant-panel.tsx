@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowUp, History, ImageIcon, LoaderCircle, MessageSquare, PanelRightClose, Plus, RotateCcw, Settings2, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowUp, ChevronRight, History, ImageIcon, LoaderCircle, MessageSquare, PanelRightClose, Plus, RotateCcw, Settings2, Sparkles, Trash2, X } from "lucide-react";
 import { Button, ConfigProvider, Input, InputNumber, Modal, Popover, Segmented, Tooltip } from "antd";
 import { motion } from "motion/react";
 
@@ -514,16 +514,82 @@ function AssistantMessages({
               {!message.images?.length ? <Button shape="circle" size="small" style={{ borderColor: theme.node.stroke }} icon={<Plus className="size-3.5" />} onClick={() => onInsertText(message.text)} title="插入画布" /> : null}
             </div>
           ) : null}
-          {message.images?.map((image) => (
-            <div key={image.id} className="w-[250px] overflow-hidden rounded-2xl border" style={{ background: theme.node.panel, borderColor: theme.node.stroke }}>
-              <img src={image.dataUrl} alt="" className="aspect-square w-full cursor-pointer object-cover" onClick={() => setPreviewSrc(image.dataUrl)} />
-              <Button type="text" className="!h-8 !w-full !rounded-none" style={{ borderTop: `1px solid ${theme.node.stroke}`, color: theme.node.text }} icon={<Plus className="size-3.5" />} onClick={() => onInsertImage(image)} title="插入画布" />
-            </div>
-          ))}
+          {message.images?.length ? (
+            <AssistantImageGroup images={message.images} onInsertImage={onInsertImage} onPreview={setPreviewSrc} />
+          ) : null}
         </div>
       ))}
       <ImagePreviewOverlay src={previewSrc} onClose={() => setPreviewSrc(null)} />
     </>
+  );
+}
+
+function AssistantImageGroup({ images, onInsertImage, onPreview }: { images: CanvasAssistantImage[]; onInsertImage: (image: CanvasAssistantImage) => void; onPreview: (src: string) => void }) {
+  const theme = canvasThemes[useThemeStore((state) => state.theme)];
+  const [expanded, setExpanded] = useState(false);
+
+  if (images.length === 1) {
+    const image = images[0];
+    return (
+      <div className="w-[250px] overflow-hidden rounded-2xl border" style={{ background: theme.node.panel, borderColor: theme.node.stroke }}>
+        <img src={image.dataUrl} alt="" className="aspect-square w-full cursor-pointer object-cover" onClick={() => onPreview(image.dataUrl)} />
+        <Button type="text" className="!h-8 !w-full !rounded-none" style={{ borderTop: `1px solid ${theme.node.stroke}`, color: theme.node.text }} icon={<Plus className="size-3.5" />} onClick={() => onInsertImage(image)} title="插入画布" />
+      </div>
+    );
+  }
+
+  if (!expanded) {
+    return (
+      <div className="relative w-[250px] overflow-visible">
+        {Array.from({ length: Math.min(images.length - 1, 3) }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute inset-0 rounded-2xl border shadow-[0_8px_20px_rgba(68,64,60,.10)]"
+            style={{
+              background: `linear-gradient(135deg, ${theme.node.panel}, ${theme.node.fill})`,
+              borderColor: theme.node.stroke,
+              transform: `translate(${12 + i * 8}px, ${6 + i * 5}px) rotate(${3 + i * 2}deg)`,
+              zIndex: -i - 1,
+            }}
+          />
+        ))}
+        <div className="relative overflow-hidden rounded-2xl border" style={{ background: theme.node.panel, borderColor: theme.node.stroke }}>
+          <img src={images[0].dataUrl} alt="" className="aspect-square w-full cursor-pointer object-cover" onClick={() => onPreview(images[0].dataUrl)} />
+          <button
+            type="button"
+            className="absolute right-2 top-2 z-10 flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold backdrop-blur-md transition hover:scale-[1.03]"
+            style={{ background: `${theme.toolbar.panel}d9`, borderColor: `${theme.toolbar.border}cc`, color: theme.node.text }}
+            onClick={() => setExpanded(true)}
+          >
+            <span className="leading-none text-[#2f80ff]">{images.length}</span>
+            <ChevronRight className="size-3 opacity-55" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full">
+      <button
+        type="button"
+        className="mb-2 flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium transition hover:opacity-70"
+        style={{ color: theme.node.text }}
+        onClick={() => setExpanded(false)}
+      >
+        <span className="text-[#2f80ff]">{images.length}</span>
+        <span className="opacity-60">张图片</span>
+        <ChevronRight className="size-3 rotate-90 opacity-55 transition-transform" />
+      </button>
+      <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}>
+        {images.map((image) => (
+          <div key={image.id} className="overflow-hidden rounded-xl border" style={{ background: theme.node.panel, borderColor: theme.node.stroke }}>
+            <img src={image.dataUrl} alt="" className="aspect-square w-full cursor-pointer object-cover" onClick={() => onPreview(image.dataUrl)} />
+            <Button type="text" className="!h-7 !w-full !rounded-none !text-xs" style={{ borderTop: `1px solid ${theme.node.stroke}`, color: theme.node.text }} icon={<Plus className="size-3" />} onClick={() => onInsertImage(image)} title="插入画布" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
